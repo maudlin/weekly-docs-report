@@ -1,21 +1,22 @@
 # Automated Report Generation and Notification Script
 
-This script automates the creation, scheduling, and notification of reports using Google Apps Script. It includes enhanced error handling and customizable Slack notifications.
+This script automates the creation, scheduling, and notification of reports using Google Apps Script. It includes options for Slack and email notifications, flexible scheduling, and automatic reminders.
 
 ## Features
 
-1. **Flexible Scheduling**: Supports various scheduling frequencies, including daily, weekly, every X days, multi-weekly, and monthly.
-2. **Customizable Reminders**: Allows multiple, user-configurable reminders with custom messages and lead times.
+1. **Flexible Scheduling**: Supports various scheduling frequencies, including daily, weekly, monthly, multi-daily, and multi-weekly.
+2. **Customizable Notifications**: Choose between Slack and email notifications, or use both. Notifications can be sent to a specific person or distribution group.
 3. **Automated Report Creation**: Generates reports from a Google Docs template, replaces placeholders with dynamic content, and saves them in a specified Google Drive folder.
-4. **Slack Notifications**: Sends notifications and reminders to a Slack channel, and optionally sends error notifications in case of failures.
-5. **Error Handling**: Integrated error handling via `try...catch` with logging and optional error notifications through Slack.
+4. **Duplicate Prevention**: Skips report creation if a report for the same date already exists.
+5. **Reminder System**: Sends reminders based on days before the report is due. You can use Google Apps Script triggers to set when the reminders should be sent.
+6. **Error Handling**: Logs errors and optionally sends error notifications via Slack.
 
 ## Prerequisites
 
-- A Google account with access to Google Drive and Google Apps Script.
-- A Google Docs template to use for report generation.
-- Slack Incoming Webhook URL for sending messages.
-- Create a Slack channel for notifications (optional).
+1. A Google account with access to Google Drive and Google Apps Script.
+2. A Google Docs template to use for report generation.
+3. Slack Incoming Webhook URL (optional) for sending messages.
+4. Email addresses for notifications (optional).
 
 ## Setup Instructions
 
@@ -26,59 +27,58 @@ This script automates the creation, scheduling, and notification of reports usin
 
 ### 2. **Configure Script Settings**
 
-- **Slack Integration Settings**:  
-   Set the following variables in the script to configure Slack notifications:
+- **Notification Settings**:  
+   Set the following variables to configure Slack and email notifications:
    ```javascript
-   var ENABLE_SLACK_NOTIFICATIONS = true; // Enable or disable Slack notifications.
-   var WEBHOOKURI = "https://hooks.slack.com/services/your/webhook/url"; // Your Slack Incoming Webhook URL.
-   var BOTNAME = "weekly_update_bot"; // Name displayed for the bot in Slack.
-   var SLACKCHANNEL = "#your-channel"; // Slack channel to post messages in.
-   var ENABLE_ERROR_NOTIFICATIONS = true; // Enable or disable error notifications via Slack.
+   var NOTIFICATIONS = {
+     slack: true,  // Enable or disable Slack notifications
+     email: true,  // Enable or disable Email notifications
+     emailRecipient: "team@example.com"  // Email address for notifications
+   };
+   ```
+
+- **Slack Integration Settings** (if Slack is enabled):  
+   ```javascript
+   var WEBHOOKURI = "https://hooks.slack.com/services/your/webhook/url";  // Your Slack Incoming Webhook URL
+   var BOTNAME = "weekly_update_bot";  // Name displayed for the bot in Slack
+   var SLACKCHANNEL = "#your-channel";  // Slack channel to post messages in
    ```
 
 - **Report Settings**:  
-   Set up the following variables to configure report creation:
+   Configure the following variables to specify how reports are generated:
    ```javascript
-   var TEMPLATEFILEID = "your-template-file-id"; // Google Doc ID of your report template.
-   var REPORTFOLDER = "your-report-folder-id"; // Google Drive folder ID to save reports.
-   var FILENAMEPREFIX = "Weekly Update - "; // Prefix for generated report names.
-   var DATEPLACEHOLDER = "XDATEX"; // Placeholder text in the template to be replaced with the date.
-   var LEAD_TIME_DAYS = 2; // Number of days before due date to create the report.
-   var CREATIONMESSAGE = "A new report has been created for DUE_DATE. Please start contributing: <FILEURL|Report Link>"; // Slack message when report is created.
+   var TEMPLATEFILEID = "your-template-file-id";  // Google Doc ID of your report template
+   var REPORTFOLDER = "your-report-folder-id";  // Google Drive folder ID to save reports
+   var FILENAMEPREFIX = "Weekly Update - ";  // Prefix for generated report names
+   var DATEPLACEHOLDER = "XDATEX";  // Placeholder text in the template to be replaced with the date
+   var LEAD_TIME_DAYS = 2;  // Number of days before the due date to create the report
+   var CREATIONMESSAGE = "A new report has been created for DUE_DATE. Please start contributing: <FILEURL|Report Link>";  // Message when report is created
    ```
 
 - **Scheduling Settings**:  
-   Set the report scheduling frequency and parameters:
+   Configure scheduling based on the user’s desired repeat frequency and the start date for the first report:
    ```javascript
    var SCHEDULE = {
-     frequency: 'multiWeekly', // Options: 'daily', 'weekly', 'everyXDays', 'multiWeekly', 'monthly'.
-     dayOfWeek: 1, // For 'weekly' and 'multiWeekly' (0 = Sunday, 1 = Monday, ..., 6 = Saturday).
-     intervalDays: 7, // For 'everyXDays'.
-     intervalWeeks: 2, // For 'multiWeekly'.
-     dayOfMonth: 15, // For 'monthly' on a specific date (1-31).
-     weekOfMonth: 2, // For 'monthly' on a specific week (1-5).
-     dayOfWeekInMonth: 4, // For 'monthly' on a specific day of the week (0 = Sunday, ..., 6 = Saturday).
-     timeZone: 'GMT' // Time zone for date calculations.
+     startDate: new Date('2024-01-01'),  // Absolute start date (when the first report is due)
+     repeatType: 'weekly',  // Options: 'daily', 'weekly', 'monthly', 'multiDaily', 'multiWeekly'
+     interval: 2  // Interval for multiDaily and multiWeekly (e.g., every 2 days or 2 weeks)
    };
    ```
 
 - **Reminder Settings**:  
-   Configure reminder messages and lead times:
+   Configure the reminders that are sent days before the report is due:
    ```javascript
    var REMINDERS = [
      {
-       daysBeforeDue: 7, // Days before the report due date.
-       timeOfDay: '09:00', // Time of day to send the reminder (24-hour format).
+       daysBeforeDue: 7,  // Days before the report is due
        message: "The report is due in a week on DUE_DATE. Please start preparing."
      },
      {
        daysBeforeDue: 1,
-       timeOfDay: '09:00',
-       message: "Reminder: The report is due tomorrow (DUE_DATE)."
+       message: "Reminder: The report is due tomorrow (DUE_DATE). Don't forget to complete your sections."
      },
      {
        daysBeforeDue: 0,
-       timeOfDay: '09:00',
        message: "Today is the due date for the report (DUE_DATE). Please finalize your inputs."
      }
    ];
@@ -87,34 +87,37 @@ This script automates the creation, scheduling, and notification of reports usin
 ### 3. **Set Up Triggers**
 
 - **Trigger for Report Creation**:  
-   Go to **Edit > Current project's triggers** and set a time-driven trigger for the `createReportAndNotify()` function to run at the desired time.
+   Go to **Edit > Current project's triggers** and set a time-driven trigger for the `createReportAndNotify()` function to run at the desired time (e.g., daily).
 
 - **Trigger for Reminders**:  
-   Add another time-driven trigger for the `checkAndSendReminders()` function. It’s recommended to run this at least hourly to ensure timely reminders.
+   Set up a time-driven trigger for the `checkAndSendReminders()` function to run as frequently as needed (e.g., hourly or daily). This allows reminders to be sent based on the days before the report is due.
+
+## Duplicate Prevention
+
+- The script checks whether a report with the same name (based on the date) already exists in the target folder before creating a new report.
+- If a report already exists, the creation is skipped, and no Slack or email notifications are sent for that report.
 
 ## Error Handling and Notifications
 
-- The script includes detailed error handling using `try...catch` blocks. If an error occurs, it will be logged using `Logger.log()`, and optionally, an error message will be sent to Slack.
+- **Error Logging**:  
+   Errors are logged using `Logger.log()` and can optionally be sent as Slack messages if `ENABLE_ERROR_NOTIFICATIONS` is set to `true`.
 
 - **Enable Error Notifications**:  
    To receive error notifications via Slack, set `ENABLE_ERROR_NOTIFICATIONS` to `true` in the script:
    ```javascript
-   var ENABLE_ERROR_NOTIFICATIONS = true; // Set to 'true' to receive error notifications.
+   var ENABLE_ERROR_NOTIFICATIONS = true;  // Set to 'true' to receive error notifications.
    ```
 
-- **Error Logging**:  
-   Errors are logged to the Google Apps Script log (`View > Logs`), and you can add custom error logging mechanisms (e.g., email, external service) as needed.
+- **Customizing Notifications**:  
+   You can modify the Slack and email notification messages by editing the corresponding message templates in the script.
 
 ## Customization and Extensibility
 
-- **Customizing Slack Messages**:  
-   You can modify the Slack messages for report creation, reminders, and errors by editing the corresponding message templates in the script.
-
 - **Adding More Reminders**:  
-   You can add more reminders to the `REMINDERS` array, specifying different lead times and custom messages as needed.
+   You can add more reminders to the `REMINDERS` array by specifying different lead times and custom messages.
 
 - **Extending Error Logging**:  
-   If you need more advanced error logging (e.g., storing errors in Google Sheets or sending emails), you can extend the `logError()` function in the script to include these capabilities.
+   You can extend the `logError()` function to log errors in additional ways, such as sending emails, logging to a Google Sheet, or using an external service.
 
 ## License
 
