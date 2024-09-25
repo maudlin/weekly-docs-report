@@ -12,7 +12,7 @@ var ENABLE_ERROR_NOTIFICATIONS = true; // Set to 'true' to receive error notific
 // Report Settings
 var TEMPLATEFILEID = "your-template-file-id"; // Google Doc ID of your report template
 var REPORTFOLDER = "your-report-folder-id"; // Google Drive folder ID to save reports
-var FILENAMEPREFIX = "Seeto Weekly Update - "; // Prefix for generated report names
+var FILENAMEPREFIX = "Weekly Update - "; // Prefix for generated report names
 var DATEPLACEHOLDER = "XDATEX"; // Placeholder text in the template to be replaced with the date
 var LEAD_TIME_DAYS = 2; // Create the report X days before it's due
 var CREATIONMESSAGE = "A new report has been created for DUE_DATE. Please start contributing: <FILEURL|Report Link>"; // Message when report is created
