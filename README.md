@@ -1,128 +1,232 @@
-# Weekly Report Automation Script
 
-This script automates the creation and notification of a weekly report using Google Apps Script.
-
-## Features
-
-1. **Creates a Weekly Report**: The script generates a new Google Doc from a template each week.
-2. **Replaces Placeholder Text**: The script replaces a placeholder text in the template with the current date.
-3. **Saves Report**: The generated report is saved in a specified Google Drive folder.
-4. **Slack Notifications**: Optionally, the script sends notifications to a Slack channel when the report is created and on the due date as a reminder.
-
-## Setup Instructions
-
-### Required Variables
-
-1. **WEBHOOKURI**: Replace with your Slack webhook URL (optional).
-   ```javascript
-   var WEBHOOKURI = "https://hooks.slack.com/services/your/webhook/url";
-2. **BOTNAME**: Customize the bot name for Slack notifications (optional).
-   ```javascript
-   var BOTNAME = "weekly_update_bot";
-3. **SLACKCHANNEL**: Specify your Slack channel name (optional).
-   ```javascript
-   var SLACKCHANNEL = "#your-channel";
-
-4. **ENABLE_SLACK_NOTIFICATIONS**: Set to `true` to enable Slack notifications, `false` to disable them.
-   ```javascript
-   var ENABLE_SLACK_NOTIFICATIONS = true;
-5. **DAYOFWEEK**: Set the day of the week for the report (0 = Sunday, 1 = Monday, etc.).
-   ```javascript
-   var DAYOFWEEK = 1; // Monday
-6. **TEMPLATEFILEID**: Replace with your Google Doc template ID.
-   ```javascript
-   var TEMPLATEFILEID = "your-template-file-id";
-7. **FILENAMEPREFIX**: Customize the prefix for generated report names.
-    ```javascript
-    var FILENAMEPREFIX = "Weekly Update - ";
-8. **DATEPLACEHOLDER**: Specify the placeholder text in the template to be replaced with the date.
-   ```javascript
-   var DATEPLACEHOLDER = "XDATEX";
-9. **REPORTFOLDER**: Replace with your Google Drive folder ID.
-   ```javascript
-   var REPORTFOLDER = "your-report-folder-id";
-10. **CREATIONMESSAGE**: Customize the creation message for Slack notifications.
-    ```javascript
-    var CREATIONMESSAGE = "Hey folks, the <FILEURL|Weekly Update> for TIMESTAMP has been generated, please fill it in by end of day Monday";
-    ```
-11. **REMINDERMESSAGE**: Customize the reminder message for Slack notifications.
-    ```javascript
-    var REMINDERMESSAGE = "Last reminder! Remember to fill out the <FILEURL|Weekly Update> before lunch!";
-    ```
-
-### Time-based Triggers
-
-Set up time-based triggers in Google Apps Script to call the `createReportAndNotify` and `reminder` functions as needed. 
-
-1. Open your Google Apps Script project.
-2. Click on the clock icon in the toolbar to open the Triggers page.
-3. Click on "Add Trigger" in the bottom right corner.
-4. Set up a trigger for `createReportAndNotify` to run on the desired day and time before the report is due (e.g., every Friday).
-5. Set up a trigger for `reminder` to run on the day the report is due (e.g., every Monday morning).
-
-## Script Functions
-
-### `nextReportDate`
-
-Calculates the next report date based on the specified day of the week.
-
-```javascript
-function nextReportDate() {
-  var d = new Date();
-  
-  if (d.getDay() === DAYOFWEEK) {
-    return d;
-  }
-  
-  d.setDate(d.getDate() + (1 + 7 - d.getDay()) % 7);
-  return d;
-}
+# Automated Report Generation Script 
+ 
+This script automates the creation, scheduling, and notification of reports using Google Apps Script. It provides flexible scheduling options and customizable reminder notifications to streamline your reporting workflow. 
+ 
+## Table of Contents 
+ 
+- Features 
+- Getting Started 
+ - Prerequisites 
+ - Setup Instructions 
+- Configuration 
+ - Scheduling Settings 
+ - Reminder Settings 
+ - Slack Integration Settings 
+ - Report Settings 
+- Script Functions 
+- Time-based Triggers 
+- Customization and Extensibility 
+- License 
+ 
+--- 
+ 
+## Features 
+ 
+1. Flexible Scheduling: Supports various scheduling frequencies, including daily, weekly, every X days, multi-weekly, and monthly reports on specific dates or days. 
+2. Customizable Reminders: Allows multiple, user-configurable reminders with custom messages and lead times before the report due date. 
+3. Automated Report Creation: Generates reports from a Google Docs template, replaces placeholders with dynamic content, and saves them in a specified Google Drive folder. 
+4. Slack Notifications: Sends notifications and reminders to a Slack channel to keep team members informed about report statuses. 
+5. Modular and Reusable Code: Refactored codebase with modular design for better maintainability and extensibility. 
+ 
+--- 
+ 
+## Getting Started 
+ 
+### Prerequisites 
+ 
+- A Google account with access to Google Drive and Google Apps Script. 
+- A Google Docs template to use for report generation. 
+- A Slack workspace with a channel for notifications. 
+- Slack Incoming Webhook URL for sending messages to Slack. 
+ 
+### Setup Instructions 
+ 
+1. Copy the Script: 
+ - Open Google Apps Script and create a new project. 
+ - Copy and paste the script code into the editor. 
+ 
+2. Configure Script Settings: 
+ - Update the configuration variables as described in the Configuration section. 
+ 
+3. Set Up Time-based Triggers: 
+ - Go to Edit > Current project's triggers or click the clock icon. 
+ - Add a trigger for createReportAndNotify function as per your scheduling needs. 
+ - Add a trigger for checkAndSendReminders function to run daily (e.g., every hour). 
+ 
+4. Authorize the Script: 
+ - Run the createReportAndNotify function manually to prompt authorization. 
+ - Grant the necessary permissions when prompted. 
+ 
+--- 
+ 
+## Configuration 
+ 
+Customize the following variables in the script to suit your requirements. 
+ 
+### Scheduling Settings 
+ 
+Define the scheduling frequency and related parameters. 
+ ``` javascript 
+var SCHEDULE = { 
+ frequency: 'weekly', // Options: 'daily', 'weekly', 'everyXDays', 'multiWeekly', 'monthly' 
+ dayOfWeek: 1, // For 'weekly' and 'multiWeekly' (0 = Sunday, 1 = Monday, ..., 6 = Saturday) 
+ intervalDays: 7, // For 'everyXDays' 
+ intervalWeeks: 2, // For 'multiWeekly' 
+ dayOfMonth: 15, // For 'monthly' on a specific date (1-31) 
+ weekOfMonth: 1, // For 'monthly' on a specific week (1-5) 
+ dayOfWeekInMonth: 1, // For 'monthly' on a specific day of the week (0 = Sunday, ..., 6 = Saturday) 
+ timeZone: 'GMT', // Time zone for date calculations 
+}; 
 ```
-
-### `slack`
-
-Sends a message to Slack (optional).
-
-```javascript
-function slack(message) {
-  if (!ENABLE_SLACK_NOTIFICATIONS) return;
-
-  var payload = {
-     "channel": SLACKCHANNEL,
-     "username": BOTNAME,
-     "text": message
-  };
-
-  var options = {
-    "method": "post",
-    "contentType": "application/json",
-    "payload": JSON.stringify(payload)
-  };
-  
-  UrlFetchApp.fetch(WEBHOOKURI, options);
-}
+ 
+- Examples: 
+ - Daily: frequency: 'daily' 
+ - Weekly on Monday: frequency: 'weekly', dayOfWeek: 1 
+ - Every 3 Days: frequency: 'everyXDays', intervalDays: 3 
+ - Every 2 Weeks on Friday: frequency: 'multiWeekly', intervalWeeks: 2, dayOfWeek: 5 
+ - Monthly on 15th: frequency: 'monthly', dayOfMonth: 15 
+ - Monthly on First Monday: frequency: 'monthly', weekOfMonth: 1, dayOfWeekInMonth: 1 
+ 
+### Reminder Settings 
+ 
+Customize reminder messages and schedules. 
+``` javascript 
+var REMINDERS = [ 
+ { 
+ daysBeforeDue: 2, // Days before the report due date 
+ timeOfDay: '09:00', // Time to send the reminder (HH:mm in 24-hour format) 
+ message: "Reminder: The report is due on DUE_DATE. Please add your updates: <FILEURL|Report Link>", 
+ }, 
+ { 
+ daysBeforeDue: 0, 
+ timeOfDay: '12:00', 
+ message: "Today is the due date for the report (DUE_DATE). Please finalize your inputs: <FILEURL|Report Link>", 
+ }, 
+]; 
 ```
-
-### `reminder`
-
-Sends a reminder to fill out the report.
-
-```javascript
-function reminder() {
-  var iso8061 = Utilities.formatDate(nextReportDate(), "GMT", "yyyy-MM-dd");
-  var name = FILENAMEPREFIX + iso8061;
-  var docId = DriveApp.getFilesByName(name).next().getId();
-  var doc = DocumentApp.openById(docId);
-
-  // Notify people, if Slack notifications are enabled
-  if (ENABLE_SLACK_NOTIFICATIONS) {
-    var message = REMINDERMESSAGE.replace("FILEURL", doc.getUrl());
-    slack(message);
-  }
-}
+ 
+- Placeholders in Messages: 
+ - DUE_DATE: Replaced with the report due date. 
+ - FILEURL: Replaced with the URL of the report document. 
+ 
+### Slack Integration Settings 
+ 
+Configure Slack notifications. 
+``` javascript 
+var ENABLE_SLACK_NOTIFICATIONS = true; // Set to 'false' to disable Slack notifications 
+var WEBHOOKURI = "https://hooks.slack.com/services/your/webhook/url"; // Your Slack Incoming Webhook URL 
+var BOTNAME = "report_bot"; // Name displayed for the bot in Slack 
+var SLACKCHANNEL = "#your-channel"; // Slack channel to post messages in 
 ```
+ 
+### Report Settings 
+ 
+Set up report generation details. 
+``` javascript 
+var TEMPLATEFILEID = "your-template-file-id"; // Google Doc ID of your report template 
+var REPORTFOLDER = "your-report-folder-id"; // Google Drive folder ID to save reports 
+var FILENAMEPREFIX = "Automated Report - "; // Prefix for generated report names 
+var DATEPLACEHOLDER = "XDATEX"; // Placeholder text in the template to be replaced with the date 
+var LEAD_TIME_DAYS = 2; // Days before due date to create the report 
+var CREATIONMESSAGE = "A new report has been created for DUE_DATE. Please start contributing: <FILEURL|Report Link>"; // Message when report is created 
+```
+ 
+--- 
+ 
+## Script Functions 
+ 
+### nextReportDate() 
+ 
+Calculates the next report date based on the scheduling settings. 
+``` javascript 
+function nextReportDate() { 
+ // Implementation based on SCHEDULE settings 
+} 
+```
+ 
+### createReportAndNotify() 
+ 
+Creates the report and sends an initial notification. 
+``` javascript 
+function createReportAndNotify() { 
+ // Checks if it's time to create the report 
+ // Generates the report 
+ // Sends a Slack message 
+} 
+```
+ 
+### createReport(reportDate) 
+ 
+Generates the report document from the template. 
+``` javascript 
+function createReport(reportDate) { 
+ // Copies the template 
+ // Replaces placeholders 
+ // Saves the report in the specified folder 
+} 
+```
+ 
+### checkAndSendReminders() 
+ 
+Checks if reminders need to be sent and sends them. 
+``` javascript 
+function checkAndSendReminders() { 
+ // Calculates days until due date 
+ // Sends reminders based on REMINDERS configuration 
+} 
+```
+ 
+### sendSlackMessage(message) 
+ 
+Sends a message to Slack. 
+``` javascript 
+function sendSlackMessage(message) { 
+ // Constructs and sends the Slack message 
+} 
+```
+ 
+--- 
+ 
+## Time-based Triggers 
+ 
+Set up triggers to automate script execution. 
+ 
+### Creating Triggers 
+ 
+1. Open your Google Apps Script project. 
+2. Click on the Triggers icon (clock symbol) or navigate to Edit > Current project's triggers. 
+3. Click Add Trigger. 
+ 
+### Trigger for Report Creation 
+ 
+- Function: createReportAndNotify 
+- Select event source: Time-driven 
+- Type of time-based trigger: Day timer 
+- Select time of day: Choose a time that aligns with your LEAD_TIME_DAYS 
+ 
+### Trigger for Reminders 
+ 
+- Function: checkAndSendReminders 
+- Select event source: Time-driven 
+- Type of time-based trigger: Hour timer 
+- Select hour interval: Every hour or as needed based on your earliest timeOfDay in REMINDERS 
+ 
+--- 
+ 
+## Customization and Extensibility 
+ 
+- Adding More Reminders: Append additional objects to the REMINDERS array with custom daysBeforeDue, timeOfDay, and message. 
+- Changing the Time Zone: Update SCHEDULE.timeZone to match your preferred time zone (e.g., "America/New_York"). 
+- Modifying Placeholders: Ensure consistency in placeholders (DUE_DATE, FILEURL) across messages and replace them accordingly in the script functions. 
+- Extending Functionality: Use the modular structure to add new features, such as email notifications or integration with other services. 
 
+--- 
+ 
+Note: Ensure that all IDs (template file ID, folder ID) and URLs are correctly set. Test the script thoroughly to confirm that scheduling and reminders work as expected. 
 
-## License
-
+--- 
+ 
+## License 
+ 
 This project is licensed under the MIT License.
