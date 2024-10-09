@@ -16,8 +16,8 @@ var SLACKCHANNEL = "#your-channel"; // Slack channel to post messages in
 var ENABLE_ERROR_NOTIFICATIONS = false; // Set to 'true' to receive error notifications via Slack
 
 // Report Settings
-var TEMPLATEFILEID = "1RyLEFZUG5SFQxWed2y1hqaPKwl_MO3eDKYpw5JF9lTs"; // Google Doc ID of your report template
-var REPORTFOLDER = "1yjvaaJkD77a_1JuZ0f58uTrYY2Avjo7K"; // Google Drive folder ID to save reports
+var TEMPLATEFILEID = "$$GOOGLEID$$"; // Google Doc ID of your report template
+var REPORTFOLDER = "$$GOOGLEID$$"; // Google Drive folder ID to save reports
 var FILENAMEPREFIX = "Weekly Update - "; // Prefix for generated report names
 var DATEPLACEHOLDER = "XDATEX"; // Placeholder text in the template to be replaced with the date
 var LEAD_TIME_DAYS = 2; // Create the report X days before it's due
