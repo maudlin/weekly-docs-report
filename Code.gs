@@ -1,8 +1,9 @@
 /**
  * This script automates the creation and notification of reports using Google Apps Script.
  */
-
 // Notification Settings
+// Configure whether to enable Slack and Email notifications for different stages of the report workflow.
+// Set emailRecipient to the desired recipient for email notifications.
 var NOTIFICATIONS = {
   slack: false,  // Enable or disable Slack notifications
   email: false,  // Enable or disable Email notifications
@@ -10,35 +11,41 @@ var NOTIFICATIONS = {
 };
 
 // Slack Integration Settings
-var WEBHOOKURI = "https://hooks.slack.com/services/your/webhook/url"; // Your Slack Incoming Webhook URL
-var BOTNAME = "weekly_update_bot"; // Name displayed for the bot in Slack
-var SLACKCHANNEL = "#your-channel"; // Slack channel to post messages in
+// Configure the Slack webhook URL, bot name, and channel for notifications. Update WEBHOOKURI with your actual Slack webhook URL.
+var WEBHOOKURI = "[CHANGEME]"; // Your Slack Incoming Webhook URL
+var BOTNAME = "status_update_bot"; // Name displayed for the bot in Slack
+var SLACKCHANNEL = "#project_status_report_update"; // Slack channel to post messages in
 var ENABLE_ERROR_NOTIFICATIONS = false; // Set to 'true' to receive error notifications via Slack
 
 // Report Settings
-var TEMPLATEFILEID = "$$GOOGLEID$$"; // Google Doc ID of your report template
-var REPORTFOLDER = "$$GOOGLEID$$"; // Google Drive folder ID to save reports
+// Configure the Google Doc template and Drive folder to save reports.
+// TEMPLATEFILEID: Google Doc ID for the report template.
+// REPORTFOLDER: Google Drive folder ID where reports should be saved.
+// DATEPLACEHOLDER: Placeholder text in the template that should be replaced with the date.
+// LEAD_TIME_DAYS: Number of days before the report is due that it should be created.
+var TEMPLATEFILEID = "[CHANGEME]"; // Google Doc ID of your report template
+var REPORTFOLDER = "[CHANGEME]"; // Google Drive folder ID to save reports
 var FILENAMEPREFIX = "Weekly Update - "; // Prefix for generated report names
 var DATEPLACEHOLDER = "XDATEX"; // Placeholder text in the template to be replaced with the date
-var LEAD_TIME_DAYS = 2; // Create the report X days before it's due
-var CREATIONMESSAGE = "A new report has been created for DUE_DATE. Please start contributing: <FILEURL|Report Link>"; // Message when report is created
+var LEAD_TIME_DAYS = 3; // Create the report X days before it's due
+var CREATIONMESSAGE = "Hey folks, the bi-weekly report for DUE_DATE has been generated. Please fill in by lunch on Wednesday: <FILEURL|Report Link>"; // Message when report is created
 
 // Scheduling Settings
+// SCHEDULE: Define the schedule for generating reports.
+// Make sure to adjust the timeZone field according to your location (e.g., 'America/New_York', 'Europe/London').
+// startDate: The first date when the report is due.
+// repeatType: Frequency of report generation - 'daily', 'weekly', 'monthly'.
+// interval: The interval between report generations (used for weekly or daily frequency).
+// timeZone: The user's time zone.
 var SCHEDULE = {
-  startDate: new Date('2024-09-27'),  // Absolute start date (when the first report is due)
-  repeatType: 'weekly',                // Options: 'daily', 'weekly', 'monthly', 'multiDaily', 'multiWeekly'
-  interval: 2,                          // Interval in days or weeks (used for multiDaily and multiWeekly)
-  timeZone: 'GMT' // Adjust as needed
+  startDate: new Date('2024-10-19'),  // Absolute start date (when the first report is due)
+  repeatType: 'weekly',                // Options: 'daily', 'weekly', 'monthly'
+  interval: 2,                          // Interval in weeks or days (used for weekly/daily)
+  timeZone: 'America/New_York' // Adjust as needed
 };
-
-
-var MULTIWEEK_SETTINGS = {
-  startDate: new Date('2024-09-26'), // Absolute start date (e.g., first report date)
-  weekInterval: 2, // Report every X weeks (e.g., every 2 weeks)
-};
-
 
 // Reminder Settings
+// Configure reminders to be sent before the report is due. The reminders array defines how many days before the report is due each reminder should be sent.
 var REMINDERS = [
   {
     daysBeforeDue: 2,  // Days before the report is due
@@ -56,15 +63,17 @@ var REMINDERS = [
 
 // Utility Functions
 var Utils = (function() {
+  // Utility function to format a date in the specified format and time zone
   function formatDate(date, format) {
     try {
       return Utilities.formatDate(date, SCHEDULE.timeZone, format);
     } catch (error) {
-      logError("Error in formatDate: " + error);
+      Utils.logError("Error in formatDate: " + error);
       throw error;
     }
   }
 
+  // Utility function to parse time from a given string (HH:MM)
   function parseTime(timeString) {
     try {
       var parts = timeString.split(':');
@@ -73,81 +82,130 @@ var Utils = (function() {
         minutes: parseInt(parts[1], 10)
       };
     } catch (error) {
-      logError("Error in parseTime: " + error);
+      Utils.logError("Error in parseTime: " + error);
       throw error;
+    }
+  }
+
+  // Utility function to get today's date normalized to midnight in the user's time zone
+  function getNormalizedToday() {
+    try {
+      var today = new Date();
+      var localizedTodayString = Utilities.formatDate(today, SCHEDULE.timeZone, 'yyyy-MM-dd');
+      return new Date(localizedTodayString + 'T00:00:00');
+    } catch (error) {
+      Utils.logError("Error in getNormalizedToday: " + error);
+      throw error;
+    }
+  }
+
+  // Utility function for logging errors
+  function logError(error) {
+    Logger.log(error);
+    // Optionally, implement additional error logging mechanisms:
+    if (NOTIFICATIONS.slack && ENABLE_ERROR_NOTIFICATIONS) {
+      Notifier.sendSlackMessage("Error: " + error);
+    } else {
+      Logger.log("Error: " + error);
     }
   }
 
   return {
     formatDate: formatDate,
     parseTime: parseTime,
+    getNormalizedToday: getNormalizedToday,
+    logError: logError
   };
 })();
+
 
 // Scheduler Module
 var Scheduler = (function() {
   function getNextReportDate() {
     try {
-      var today = new Date();
-      var startDate = SCHEDULE.startDate;
-      var repeatType = SCHEDULE.repeatType;
-      var interval = SCHEDULE.interval || 1; // Default interval is 1 for daily, weekly, monthly
+      var today = Utils.getNormalizedToday();
+      return getNextReportDateAfter(today);
+    } catch (error) {
+      Utils.logError("Error in getNextReportDate: " + error);
+      throw error;
+    }
+  }
 
+  function getNextReportDateAfter(referenceDate) {
+    try {
+      var startDate = new Date(SCHEDULE.startDate);
+      var repeatType = SCHEDULE.repeatType.toLowerCase();
+      var interval = SCHEDULE.interval || 1; // Default interval is 1 for daily, weekly, monthly
       var nextDate;
 
-      switch (repeatType.toLowerCase()) {
+      switch (repeatType) {
         case 'daily':
-          nextDate = getNextDateFromStart(startDate, today, 1);
+          nextDate = getNextDateFromStart(startDate, referenceDate, interval);
           break;
-
         case 'weekly':
-          nextDate = getNextDateFromStart(startDate, today, 7);
+          nextDate = getNextDateFromStart(startDate, referenceDate, interval * 7);
           break;
-
         case 'monthly':
-          nextDate = getNextMonthlyDate(startDate, today);
+          nextDate = getNextMonthlyDate(startDate, referenceDate);
           break;
-
-        case 'multidaily':
-          nextDate = getNextDateFromStart(startDate, today, interval); // n days
-          break;
-
-        case 'multiweekly':
-          nextDate = getNextDateFromStart(startDate, today, interval * 7); // n weeks
-          break;
-
         default:
           throw new Error('Invalid repeat type specified.');
       }
 
+      // Ensure next date is not in the past
+      if (nextDate <= referenceDate) {
+        switch (repeatType) {
+          case 'daily':
+            nextDate.setDate(nextDate.getDate() + interval);
+            break;
+          case 'weekly':
+            nextDate.setDate(nextDate.getDate() + interval * 7);
+            break;
+          case 'monthly':
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            break;
+        }
+      }
+
       return nextDate;
     } catch (error) {
-      logError("Error in getNextReportDate: " + error);
+      Utils.logError("Error in getNextReportDateAfter: " + error);
       throw error;
     }
   }
 
   // Helper function to calculate the next date based on the start date and an interval
-  function getNextDateFromStart(startDate, currentDate, dayInterval) {
-    var daysBetween = Math.floor((currentDate - startDate) / (1000 * 60 * 60 * 24)); // Difference in days
+  function getNextDateFromStart(startDate, referenceDate, dayInterval) {
+    startDate.setHours(0, 0, 0, 0);
+    referenceDate.setHours(0, 0, 0, 0);
+
+    if (referenceDate < startDate) {
+      return startDate;
+    }
+
+    var daysBetween = Math.floor((referenceDate - startDate) / (1000 * 60 * 60 * 24)); // Difference in days
     var intervalsPassed = Math.floor(daysBetween / dayInterval);
     var nextDate = new Date(startDate);
     nextDate.setDate(startDate.getDate() + (intervalsPassed + 1) * dayInterval);
+
     return nextDate;
   }
 
   // Helper function to calculate the next monthly date
-  function getNextMonthlyDate(startDate, currentDate) {
+  function getNextMonthlyDate(startDate, referenceDate) {
     var nextDate = new Date(startDate);
-    nextDate.setMonth(currentDate.getMonth());
-    if (nextDate < currentDate) {
-      nextDate.setMonth(nextDate.getMonth() + 1); // Move to next month
+    nextDate.setMonth(referenceDate.getMonth());
+
+    if (nextDate <= referenceDate) {
+      nextDate.setMonth(nextDate.getMonth() + 1); // Move to next month if already passed
     }
+
     return nextDate;
   }
 
   return {
     getNextReportDate: getNextReportDate,
+    getNextReportDateAfter: getNextReportDateAfter
   };
 })();
 
@@ -159,35 +217,28 @@ var ReportManager = (function() {
       var isoDate = Utils.formatDate(reportDate, "yyyy-MM-dd");
       var niceDate = Utils.formatDate(reportDate, "EEEE, MMMM d, yyyy");
       var reportName = FILENAMEPREFIX + isoDate;
-
       // Check if the report already exists in the folder
       var existingFiles = DriveApp.getFilesByName(reportName);
       if (existingFiles.hasNext()) {
         Logger.log("Report already exists: " + reportName);
         return; // Skip report creation if it already exists
       }
-
       Logger.log("Creating new report: " + reportName);
-
       // Copy the template file
       var docId = DriveApp.getFileById(TEMPLATEFILEID).makeCopy().getId();
       var doc = DocumentApp.openById(docId);
       doc.setName(reportName);
-
       // Replace the date placeholder
       var body = doc.getBody();
       body.replaceText(DATEPLACEHOLDER, niceDate);
       doc.saveAndClose();
-
       // Move the file to the specified folder
       var folder = DriveApp.getFolderById(REPORTFOLDER);
       folder.addFile(DriveApp.getFileById(docId));
       DriveApp.getRootFolder().removeFile(DriveApp.getFileById(docId)); // Remove from root if necessary
-
       Logger.log("Report successfully created: " + reportName);
-
     } catch (error) {
-      logError("Error in createReport: " + error);
+      Utils.logError("Error in createReport: " + error);
       throw error;
     }
   }
@@ -203,7 +254,7 @@ var ReportManager = (function() {
         return "Report URL not available.";
       }
     } catch (error) {
-      logError("Error in getReportUrl: " + error);
+      Utils.logError("Error in getReportUrl: " + error);
       return "Report URL not available.";
     }
   }
@@ -214,67 +265,65 @@ var ReportManager = (function() {
   };
 })();
 
-
+// Notifier Module
 var Notifier = (function() {
-
-  // Function to send Slack messages
   function sendSlackMessage(message) {
     if (!NOTIFICATIONS.slack) return;  // Slack notifications are disabled
-
     try {
       var payload = {
         channel: SLACKCHANNEL,
         username: BOTNAME,
         text: message
       };
-
       var options = {
         method: "post",
         contentType: "application/json",
         payload: JSON.stringify(payload)
       };
-
       UrlFetchApp.fetch(WEBHOOKURI, options);
+      Logger.log("Slack message sent: " + message);
     } catch (error) {
-      logError("Error in sendSlackMessage: " + error);
+      Utils.logError("Error in sendSlackMessage: " + error);
     }
   }
 
-  // Function to send email notifications
   function sendEmailNotification(message) {
     if (!NOTIFICATIONS.email) return;  // Email notifications are disabled
-
     try {
       MailApp.sendEmail({
         to: NOTIFICATIONS.emailRecipient,
         subject: "Report Notification",
         body: message
       });
+      Logger.log("Email notification sent to: " + NOTIFICATIONS.emailRecipient);
     } catch (error) {
-      logError("Error in sendEmailNotification: " + error);
+      Utils.logError("Error in sendEmailNotification: " + error);
     }
   }
 
-  // Function to send reminders
   function sendReminders() {
     try {
-      var today = new Date();
+      var today = Utils.getNormalizedToday();
       var reportDate = Scheduler.getNextReportDate();
       var daysUntilDue = Math.ceil((reportDate - today) / (1000 * 60 * 60 * 24));
+
+      Logger.log("Next report due date: " + Utils.formatDate(reportDate, "yyyy-MM-dd"));
 
       REMINDERS.forEach(function(reminder) {
         if (daysUntilDue === reminder.daysBeforeDue) {
           var message = reminder.message
             .replace("DUE_DATE", Utils.formatDate(reportDate, "EEEE, MMMM d"));
-
           // Send Slack and/or Email notifications
           sendSlackMessage(message);
           sendEmailNotification(message);
+          Logger.log("Reminder sent: " + message);
+        } else {
+          Logger.log("No reminder today for report due date: " + Utils.formatDate(reportDate, "yyyy-MM-dd"));
         }
       });
     } catch (error) {
-      logError("Error in sendReminders: " + error);
-      sendErrorNotification("Error in sendReminders: " + error);
+      Utils.logError("Error in sendReminders: " + error);
+      sendSlackMessage("Error in sendReminders: " + error);
     }
   }
 
@@ -285,37 +334,36 @@ var Notifier = (function() {
   };
 })();
 
-
-// Error Logging Function
-function logError(error) {
-  Logger.log(error);
-  // Optionally, you can implement additional error logging mechanisms here, such as:
-  // - Sending an email notification
-  // - Logging to a spreadsheet or external logging service
-  // - Sending an error message via Slack
-  if (NOTIFICATIONS.slack && ENABLE_ERROR_NOTIFICATIONS) {
-    Notifier.sendSlackMessage("Error: " + error);
-  }
-  else {
-    Logger.log("Error: " + error);
-  }
-}
-
 // Main Functions
 function createReportAndNotify() {
   try {
     Logger.log("Starting createReportAndNotify");
 
+    // Get today and normalize to midnight
+    var today = Utils.getNormalizedToday();
+
+    // Get the next report due date
     var reportDate = Scheduler.getNextReportDate();
+
+    // Calculate the creation date for this report
     var creationDate = new Date(reportDate);
     creationDate.setDate(creationDate.getDate() - LEAD_TIME_DAYS);
 
-    var today = new Date();
-    var todayDateString = Utilities.formatDate(today, SCHEDULE.timeZone, 'yyyy-MM-dd');
-    var creationDateString = Utilities.formatDate(creationDate, SCHEDULE.timeZone, 'yyyy-MM-dd');
+    // Log today's date, creation date, and report date
+    Logger.log("Today (User Time Zone): " + Utils.formatDate(today, 'yyyy-MM-dd'));
+    Logger.log("Time Zone: " + SCHEDULE.timeZone);
 
-    if (todayDateString === creationDateString) {
-      Logger.log("Creating report for date: " + reportDate);
+    var todayDateString = Utils.formatDate(today, 'yyyy-MM-dd');
+    var creationDateString = Utils.formatDate(creationDate, 'yyyy-MM-dd');
+    var reportDateString = Utils.formatDate(reportDate, 'yyyy-MM-dd');
+
+    Logger.log("Today: " + todayDateString);
+    Logger.log("Current report creation date (" + LEAD_TIME_DAYS + " days before due date): " + creationDateString);
+    Logger.log("Current report due date: " + reportDateString);
+
+    // If today matches the creation date, create the report
+    if (Utils.formatDate(today, 'yyyy-MM-dd') === Utils.formatDate(creationDate, 'yyyy-MM-dd')) {
+      Logger.log("Creating report for due date: " + reportDateString);
 
       // Attempt to create the report
       ReportManager.createReport(reportDate);
@@ -328,27 +376,34 @@ function createReportAndNotify() {
           .replace("FILEURL", reportUrl);
         Notifier.sendSlackMessage(message);
         Notifier.sendEmailNotification(message);
+        Logger.log("Report successfully created and notifications sent.");
       } else {
         Logger.log("Report already exists, skipping notification.");
       }
-
     } else {
       Logger.log("Report not created, date mismatch. Today: " + todayDateString + ", Creation date: " + creationDateString);
     }
+
+    // Calculate and log the next report dates after the current one
+    var nextReportDate = Scheduler.getNextReportDateAfter(reportDate);
+        var nextCreationDate = new Date(nextReportDate);
+    nextCreationDate.setDate(nextReportDate.getDate() - LEAD_TIME_DAYS);
+
+    Logger.log("Next report creation date: " + Utils.formatDate(nextCreationDate, "yyyy-MM-dd"));
+    Logger.log("Next report due date: " + Utils.formatDate(nextReportDate, "yyyy-MM-dd"));
+
   } catch (error) {
-    logError("Error in createReportAndNotify: " + error);
-    Notifier.sendErrorNotification("Error in createReportAndNotify: " + error);
+    Utils.logError("Error in createReportAndNotify: " + error);
+    Notifier.sendSlackMessage("Error in createReportAndNotify: " + error);
   }
 }
-
-
 
 function checkAndSendReminders() {
   try {
     Notifier.sendReminders();
   } catch (error) {
-    logError("Error in checkAndSendReminders: " + error);
-    Notifier.sendErrorNotification("Error in checkAndSendReminders: " + error);
+    Utils.logError("Error in checkAndSendReminders: " + error);
+    Notifier.sendSlackMessage("Error in checkAndSendReminders: " + error);
   }
 }
 
